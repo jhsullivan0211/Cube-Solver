@@ -37,11 +37,22 @@ class Cube:
     def __init__(self, configuration):
         self.configuration = configuration
 
+    def __hash__(self):
+        return hash(self.configuration)
+
+    def __eq__(self, other):
+        return self.__class__ == other.__class__ and \
+               self.configuration == other.configuration
+
     def do_move(self, move):
         if move in Cube.move_dict:
             self.configuration = Cube.__permute(self.configuration, Cube.move_dict[move])
         else:
             raise ValueError("Unknown move \"" + move + "\" supplied.")
+
+    def do_moves(self, moves):
+        for move in moves:
+            self.do_move(move)
 
     def is_solved(self):
         return self.configuration == Cube.solved_tuple
@@ -57,21 +68,9 @@ class Cube:
 
 test = Cube.new_cube()
 
-test.do_move("F")
-test.do_move("R")
-test.do_move("U")
-test.do_move("r")
-test.do_move("u")
-test.do_move("f")
-test.do_move("B")
-test.do_move("d")
-test.do_move("L")
-test.do_move("b")
-test.do_move("D")
-test.do_move("l")
+test.do_moves("FRUrufBdLbDl")
 
 assert(test.configuration == ('back', 'right', 'up', 'up', 'left', 'back', 'front', 'down', 'left',
                               'left', 'up', 'front', 'right', 'back', 'down', 'down', 'front', 'right', 'left',
                               'down', 'back', 'right', 'front', 'up'))
 
-print(test.configuration)
