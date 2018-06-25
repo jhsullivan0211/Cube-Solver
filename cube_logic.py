@@ -1,7 +1,36 @@
-"""
-Contains the logic for solving a 2x2x2 rubik's cube.
+"""  Contains the 2x2x2 Pocket Cube logic portion of the application.
 
-"""
+Contains the data representation of the cube, i.e. the current state of the cube
+as well as the algorithms representing the different possible moves of the cube.
+Additionally, contains algorithms to solve the cube optimally (i.e. the shortest
+number moves) using a two-way variant of breadth-first search.  The cube is
+represented as a length-24 array of number 0 to 23, where each index corresponds to
+a particular sticker on the cube.  In the solved state, the array value will match
+its index.  Each move of the cube permutes the index values in a particular way.
+
+One difficulty with this approach is that a solved cube can be oriented many different ways.
+This would complicate the search algorithm, since there would then be twenty-four potential
+solutions to search for, any of which could be nearest. To remedy this, the cube is first
+"turned" so that one particular sticker is in its correct position.  The cube is then solved
+without moving this sticker.  This can be done because, for a 2x2x2 cube, turning any one face
+is the same as turning the opposite face the same direction (e.g. a clockwise turn of the
+right face is the same as a clockwise turn of the left face). By leaving the oriented
+sticker in place, this reduces the number of potential solutions without slowing down the
+algorithm.  It also cuts down on the number of possible moves, which reduces the branching
+factor of the implicit graph of the cube state.  In the end, this orienting step eliminates
+the solution-orientation problem and results in a massive speedup of the algorithm.
+
+The sticker-to-index mapping was chosen arbitrarily, and is listed below using a
+notation that works as follows:  A sticker is described using a three-letter triplet,
+e.g. URF.  The first letter designates the face of the cube (where U = the upper
+face (pointing at the ceiling), F = the front (pointing at the holder), R = right,
+L = left, B = back, and D = down/bottom).  The second and third letters serve to
+further identify the sticker location.  For example, URF would represent the sticker
+facing up, in the right half of the cube toward the front side.  The following shows the
+mapping of sticker positions to indexes:
+
+{0=ULF, 1=ULB, 2=URB, 3=URF, 4=FUL, 5=LUF, 6=LUB, 7=BLU, 8=BRU, 9=RUB, 10=RUF, 11=FUR, 12=FDL,
+13=LDF, 14=LDB, 15=BDL, 16=BDR, 17=RDB, 18=RDF, 19=FDR, 20=DFL, 21=DBL, 22 = DBR, 23=DFR}"""
 
 
 class Cube:
@@ -155,12 +184,125 @@ class Searcher:
         return self.visited
 
 
+class CubeBuilder:
+    """Contains static methods for building a cube from a set of 24 colors.  The only method that
+    should be called is get_cube_form_colors, which takes the UFR cube and treats it as if it were
+    already solved, determining the rest of the colors' solved locations from that one.  Cubes built
+    this way should be solved using only back, down, and right face turns."""
+
+    solve_moves = ["R", "r", "B", "b", "D", "d"]
+    @staticmethod
+    def get_cube_from_colors(colors):
+        """Returns a cube built using the specified colors, where the UFR cube is considered already
+        solved and the rest of the colors assigned using that assumption."""
+        symbol_dict = CubeBuilder.__get_symbols(colors)
+
+        translate_list = []
+        for color in colors:
+            if color not in symbol_dict:
+                raise ValueError("Error reading cube symbol " + color + ".")
+            translate_list.append(symbol_dict[color])
+        cube = Cube(tuple(translate_list))
+        if CubeBuilder.__check_validity(cube):
+            return cube
+        else:
+            raise ValueError("Invalid cube provided.")
+
+    @staticmethod
+    def __get_symbols(colors):
+        """Returns a mapping of colors from the specified list to direction strings, which
+        match the strings used in the configurations of the Cube class."""
+
+        up_symbol = colors[0]
+        front_symbol = colors[1]
+        left_symbol = colors[2]
+        back_symbol = None
+        right_symbol = None
+        down_symbol = None
+        i = 3
+        j = 6
+        while j <= 24:
+            triplet = colors[i:j]
+            if back_symbol is None:
+                back_symbol = CubeBuilder.__get_third(triplet, up_symbol, left_symbol)
+
+            if right_symbol is None:
+                right_symbol = CubeBuilder.__get_third(triplet, up_symbol, front_symbol)
+
+            if down_symbol is None:
+                down_symbol = CubeBuilder.__get_third(triplet, front_symbol, left_symbol)
+
+            i += 3
+            j += 3
+
+        symbols = {up_symbol: "up",
+                   right_symbol: "right",
+                   left_symbol: "left",
+                   front_symbol: "front",
+                   back_symbol: "back",
+                   down_symbol: "down"}
+
+        for symbol in symbols:
+            if symbol is None:
+                raise ValueError("Symbol map does not resolve correctly.")
+
+        return symbols
+
+    @staticmethod
+    def __get_third(triplet, first, second):
+        """Given a collection of three things and the first thing and second thing, returns the third thing
+        in the collection."""
+        if first in triplet and second in triplet:
+            for thing in triplet:
+                if thing != first and thing != second:
+                    return thing
+        return None
+
+    @staticmethod
+    def __check_validity(cube):
+        """Checks the validity of a cube in advance to prevent exhaustively searching the entire search space."""
+        #TODO: fix this to work.
+        return True
+
+    @staticmethod
+    def __check_triplet(triplet):
+        """Checks the validity of a triplet."""
+        #TODO: fix this to work.
+        pass
+
+
 class Solver:
     """A class containing static methods for solving a given cube.  Use Solver.get_solution to solve a
     cube; the other methods are meant to be internal."""
 
     @staticmethod
-    def find_target(origin, target, search_moves=None):
+    def get_solution(origin, target, moves=CubeBuilder.solve_moves):
+        """Returns a string of moves that will get one from the specified origin state to the specified
+        target state, using only the specified moves."""
+
+        solved_set = Solver.__find_target(origin, target, moves)
+
+        if solved_set is None:
+            raise ValueError("Cube is unsolvable.")
+
+        front = solved_set[0]
+        back = solved_set[1]
+        front_chain = Solver.__get_parent_chain(front)
+        back_chain = Solver.__get_parent_chain(back)
+
+        solution = []
+        for link in reversed(front_chain):
+            if link.marker is not None:
+                solution += link.marker
+
+        for link in back_chain:
+            if link.marker is not None:
+                solution += Cube.invert_move(link.marker)
+
+        return solution
+
+    @staticmethod
+    def __find_target(origin, target, search_moves=None):
         """Performs two-way breadth-first search to find a pair of matching cube states,
         one reached by starting the search at the front (i.e. unsolved) state and one reached
         by starting at the back (i.e. solved) state, meeting in the middle somewhere.  These c
@@ -195,7 +337,7 @@ class Solver:
         return None
 
     @staticmethod
-    def get_parent_chain(target):
+    def __get_parent_chain(target):
         """Returns a list representing the chain of parents from the specified cube until the root."""
         chain = []
         current_parent = target
@@ -206,34 +348,6 @@ class Solver:
 
         return chain
 
-    @staticmethod
-    def get_solution(origin, target, moves="URLFBDurlfbd"):
-        """Returns a string of moves that will get one from the specified origin state to the specified
-        target state, using only the specified moves."""
-
-        solved_set = Solver.find_target(origin, target, moves)
-
-        if solved_set is None:
-            raise ValueError("Cube is unsolvable.")
-
-        front = solved_set[0]
-        back = solved_set[1]
-        front_chain = Solver.get_parent_chain(front)
-        back_chain = Solver.get_parent_chain(back)
-
-        solution = []
-        for link in reversed(front_chain):
-            if link.marker is not None:
-                solution += link.marker
-
-        for link in back_chain:
-            if link.marker is not None:
-                solution += Cube.invert_move(link.marker)
-
-        return solution
 
 
-test_cube = Cube.new_cube()
-test_cube.do_moves("RUFururDbuR")
-solution = Solver.get_solution(test_cube, Cube.new_cube())
-print(solution)
+
