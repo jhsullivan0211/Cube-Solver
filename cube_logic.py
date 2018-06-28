@@ -1,24 +1,27 @@
 """  Contains the 2x2x2 Pocket Cube logic portion of the application.
 
-Contains the data representation of the cube, i.e. the current state of the cube
+Contains the data representation (i.e. the location of each sticker) of the cube,
 as well as the algorithms representing the different possible moves of the cube.
 Additionally, contains algorithms to solve the cube optimally (i.e. the shortest
 number moves) using a two-way variant of breadth-first search.  The cube is
-represented as a length-24 array of number 0 to 23, where each index corresponds to
-a particular sticker on the cube.  In the solved state, the array value will match
-its index.  Each move of the cube permutes the index values in a particular way.
+represented as a length-24 array of direction labels (e.g. "up", "left", etc.), where each
+label represents the color that would be found in the solved cube on the face in that
+particular direction.  The solved cube would have all of the "up" labels at indices
+that correspond to the upper face of the cube, all the "left" on the left face, and so forth.
 
-One difficulty with this approach is that a solved cube can be oriented many different ways.
+One difficulty with this approach is that a solved cube can be oriented many different ways
+in space, which would correspond to a different solved array under the current data structure.
 This would complicate the search algorithm, since there would then be twenty-four potential
-solutions to search for, any of which could be nearest. To remedy this, the cube is first
-"turned" so that one particular sticker is in its correct position.  The cube is then solved
-without moving this sticker.  This can be done because, for a 2x2x2 cube, turning any one face
+solutions to search for, any of which could be nearest. To remedy this, one corner piece is
+assumed to already be in the correct position, and the cube is solved under this assumption,
+without moving this corner.  This can be done because, for a 2x2x2 cube, turning any one face
 is the same as turning the opposite face the same direction (e.g. a clockwise turn of the
-right face is the same as a clockwise turn of the left face). By leaving the oriented
-sticker in place, this reduces the number of potential solutions without slowing down the
-algorithm.  It also cuts down on the number of possible moves, which reduces the branching
-factor of the implicit graph of the cube state.  In the end, this orienting step eliminates
-the solution-orientation problem and results in a massive speedup of the algorithm.
+right face is the same as a clockwise turn of the left face), if you view each piece's location
+only in terms of its relation to other pieces. By leaving the chosen corner in place, this
+fixes the solved state to be a single orientation.  An additional benefit of this is that,
+because no moves that displace the fixed piece are allowed, the branching factor of the
+cube's implicit graph is reduced from 12 to 6, which speeds up the algorithm considerably
+without missing any potential solutions.
 
 The sticker-to-index mapping was chosen arbitrarily, and is listed below using a
 notation that works as follows:  A sticker is described using a three-letter triplet,
