@@ -32,6 +32,7 @@ class CubeModel:
     cube_model = None
     cube_rotation = (0, 0, 0)
 
+
     def __init__(self):
         """Constructor for CubeDrawer.  Generates all of the points of the cube and stores them
         for quick drawing, as well as a map of each sticker to its proper color."""
@@ -42,8 +43,8 @@ class CubeModel:
             green = random.random()
             blue = random.random()
             self.color_map[sticker] = tuple([red, green, blue])
-
         self.draw_cube()
+
 
     def draw_cube(self):
         """Draws the cube using the stickers built during construction."""
@@ -57,7 +58,7 @@ class CubeModel:
         node_path = render.attachNewNode(geom_node)
         node_path.setTwoSided(True)
         self.cube_model = node_path
-        return node_path
+
 
 
     @staticmethod
@@ -94,12 +95,6 @@ class CubeModel:
         geom.addPrimitive(prim)
 
         return geom
-
-    def rotate(self, rotation):
-        new_rotation = tuple(map(sum, zip(rotation, self.cube_rotation)))
-        self.cube_rotation = new_rotation
-        self.cube_model.setHpr(self.cube_rotation)
-
 
     @staticmethod
     def scale_sticker(sticker, scalar):
@@ -157,37 +152,44 @@ class CubeModel:
 
 class MyApp(ShowBase):
 
-
     key_a = False
-
-
 
     def __init__(self):
         ShowBase.__init__(self)
         self.camera.setPos(0, -10, 0)
         self.disableMouse()
         self.camera.setPos(0, -10, 0)
-        self.accept('a', self.rotate_heading_neg)
-        self.accept('s', self.rotate_pitch_pos)
-        self.accept('d', self.rotate_heading_pos)
-        self.accept('w', self.rotate_pitch_neg)
-
+        self.accept('a', self.rotate_heading_pos)
+        self.accept('s', self.rotate_pitch_neg)
+        self.accept('d', self.rotate_heading_neg)
+        self.accept('w', self.rotate_pitch_pos)
         self.cube = CubeModel()
+        self.pivot = render.attachNewNode("pivot")
+        self.pivot.setPos((0, 0, 0))
+        self.camera.wrtReparentTo(self.pivot)
+
+
 
     def rotate_heading_pos(self):
-        self.cube.rotate((10, 0, 0))
+        self.pivot.setHpr(self.pivot, (10, 0, 0))
 
     def rotate_heading_neg(self):
-        self.cube.rotate((-10, 0, 0))
+        self.pivot.setHpr(self.pivot, (-10, 0, 0))
+
 
     def rotate_pitch_neg(self):
-        self.cube.rotate((0, -10, 0))
+        self.pivot.setHpr(self.pivot, (0, -10, 0))
 
     def rotate_pitch_pos(self):
-        self.cube.rotate((0, 10, 0))
+        self.pivot.setHpr(self.pivot, (0, 10, 0))
 
-    def rotate(task):
-        self.cube.rotate((-1, 0, 0))
+
+
+
+    @staticmethod
+    def add_vector(first, second):
+        new_vector = tuple(map(sum, zip(first, second)))
+        return new_vector
 
 
 
