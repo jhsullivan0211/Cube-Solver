@@ -15,54 +15,53 @@ from panda3d.core import lookAt
 from panda3d.core import GeomVertexFormat, GeomVertexData
 from panda3d.core import Geom, GeomTriangles, GeomVertexWriter
 from panda3d.core import Texture, GeomNode
+from direct.interval.LerpInterval import LerpHprInterval
+from direct.interval.IntervalGlobal import Sequence
 from panda3d.core import PerspectiveLens
 from panda3d.core import CardMaker
 from panda3d.core import Light, Spotlight
 from panda3d.core import TextNode
 from panda3d.core import LVector3
+from panda3d.core import CollisionRay
 from direct.task import Task
+from panda3d.core import CollisionTraverser, CollisionHandlerQueue
+from panda3d.core import CollisionNode, CollisionPolygon
+from panda3d.core import Point3
 import sys
 import os
 
 
 class CubeModel:
     """Contains data and methods for drawing a cube."""
-    stickers = None
-    color_map = {}
-    cube_model = None
-    cube_rotation = (0, 0, 0)
-
 
     def __init__(self):
         """Constructor for CubeDrawer.  Generates all of the points of the cube and stores them
         for quick drawing, as well as a map of each sticker to its proper color."""
-
+        self.color_map = {}
         self.stickers = CubeModel.generate_stickers()
-        for sticker in self.stickers:
-            red = random.random()
-            green = random.random()
-            blue = random.random()
-            self.color_map[sticker] = tuple([red, green, blue])
-        self.draw_cube()
+        self.cube_model = self.build_model()
 
-
-    def draw_cube(self):
-        """Draws the cube using the stickers built during construction."""
-
+    def build_model(self):
+        """Draws the node path for the cube."""
 
         geom_node = GeomNode('gnode')
+        color_list = [(1, 0, 0), (0, 1, 0), (0, 0, 1), (0.5, 0, 0), (0, 0.5, 0), (0, 0, 0.5)]
+        index = 0
+        self.stickers = sorted(self.stickers)
         for sticker in self.stickers:
-            sticker_geom = self.draw_sticker(sticker, self.color_map[sticker])
+            sticker_geom = self.get_sticker_geom(sticker, color_list[index])
+            index += 1
+            if index == len(color_list):
+                index = 0
             geom_node.addGeom(sticker_geom)
 
         node_path = render.attachNewNode(geom_node)
         node_path.setTwoSided(True)
-        self.cube_model = node_path
-
-
+        return node_path
 
     @staticmethod
-    def draw_sticker(sticker, sticker_color):
+    def get_sticker_geom(sticker, sticker_color):
+        """Builds and returns a Geom composed of the specified points in sticker, colored the specified color."""
 
         vertex_format = GeomVertexFormat.getV3c4()
         vertex_data = GeomVertexData("vertices", vertex_format, Geom.UHStatic)
@@ -151,50 +150,94 @@ class CubeModel:
 
 
 class MyApp(ShowBase):
+    """Runs the UI which, which displays the cube."""
 
-    key_a = False
+    rotation_speed = 1.5
 
     def __init__(self):
+        """Basic constructor for MyApp."""
         ShowBase.__init__(self)
         self.camera.setPos(0, -10, 0)
         self.disableMouse()
         self.camera.setPos(0, -10, 0)
-        self.accept('a', self.rotate_heading_pos)
-        self.accept('s', self.rotate_pitch_neg)
-        self.accept('d', self.rotate_heading_neg)
-        self.accept('w', self.rotate_pitch_pos)
         self.cube = CubeModel()
         self.pivot = render.attachNewNode("pivot")
         self.pivot.setPos((0, 0, 0))
         self.camera.wrtReparentTo(self.pivot)
+        self.taskMgr.add(self.handle_input, "input")
+
+        self.add_widgets()
+
+        self.accept('z', lambda: print(self.pivot.getHpr()))
+        self.accept('x', lambda: self.move_to(MyApp.get_snapped_angles(self.pivot.getHpr())))
+        self.accept('c', lambda: self.pivot.setHpr(45, -45, 0))
+        self.accept('v', lambda: self.pivot.setHpr(135, 30, -60))
 
 
+    def add_widgets(self):
+        self.button = DirectButton(text = ("Solve!"), scale=0.1, pos=(1, 0, 0))
 
-    def rotate_heading_pos(self):
-        self.pivot.setHpr(self.pivot, (10, 0, 0))
+        self.radio = DirectOptionMenu(text=("Test"), items=["Red", "Blue", "Green"], scale=0.1, pos=(-1, 0, 0))
 
-    def rotate_heading_neg(self):
-        self.pivot.setHpr(self.pivot, (-10, 0, 0))
+        self.label = DirectLabel(text="Here", scale=0.1, pos=(-.8, 0, -.8))
+        self.label2 = DirectLabel(text="test", scale=0.1, pos=(-.8, 0, -.9))
 
+    def handle_input(self, task):
+        """Listens for input each frame, acting if the input is in process (i.e. a key
+        is down, a button pressed, etc.)."""
 
-    def rotate_pitch_neg(self):
-        self.pivot.setHpr(self.pivot, (0, -10, 0))
+        if self.mouseWatcherNode.is_button_down('a'):
+            self.pivot.setHpr(self.pivot, (MyApp.rotation_speed, 0, 0))
+        if self.mouseWatcherNode.is_button_down('d'):
+            self.pivot.setHpr(self.pivot, (-MyApp.rotation_speed, 0, 0))
+        if self.mouseWatcherNode.is_button_down('w'):
+            self.pivot.setHpr(self.pivot, (0, MyApp.rotation_speed, 0))
+        if self.mouseWatcherNode.is_button_down('s'):
+            self.pivot.setHpr(self.pivot, (0, -MyApp.rotation_speed, 0))
+        if self.mouseWatcherNode.is_button_down('e'):
+            self.pivot.setHpr(self.pivot, (0, 0, MyApp.rotation_speed))
+        if self.mouseWatcherNode.is_button_down('r'):
+            self.pivot.setHpr(self.pivot, (0, 0, -MyApp.rotation_speed))
 
-    def rotate_pitch_pos(self):
-        self.pivot.setHpr(self.pivot, (0, 10, 0))
+        self.label['text'] = str(self.pivot.getHpr())
+        self.label2['text'] = str((self.pivot.getR() == 0 and self.pivot.getP() < 0) or
+                                  ((self.pivot.getR() == 180 or self.pivot.getR() == -180) and
+                                   self.pivot.getP() < 0))
 
+        return task.cont
 
+    def move_to(self, angle):
+        i = LerpHprInterval(self.pivot, 0.2, Point3(angle[0], angle[1], angle[2]))
+        i.start()
+
+        #debug
+
+        #end
 
 
     @staticmethod
-    def add_vector(first, second):
-        new_vector = tuple(map(sum, zip(first, second)))
-        return new_vector
+    def snap_hp(angle, deg=-135):
+        snap_points = [deg, deg + 90, deg + 180, deg + 270]
+        for i in range(len(snap_points)):
+            if angle < snap_points[i]:
+                if abs(angle - snap_points[i]) < abs(angle - snap_points[i - 1]):
+                    return snap_points[i]
+                else:
+                    return snap_points[i - 1]
 
+        return snap_points[-1]
 
+    @staticmethod
+    def snap_r(angle):
+        if abs(angle - 180) < abs(angle - 0):
+            return 180
+        else:
+            return 0
 
-
-
+    @staticmethod
+    def get_snapped_angles(angles):
+        result = [MyApp.snap_hp(angles[0]), MyApp.snap_hp(angles[1]), MyApp.snap_r(angles[2])]
+        return tuple(result)
 
 app = MyApp()
 app.run()
