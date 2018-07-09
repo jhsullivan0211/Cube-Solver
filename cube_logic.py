@@ -264,8 +264,19 @@ class CubeBuilder:
     @staticmethod
     def __check_validity(cube):
         """Checks the validity of a cube in advance to prevent exhaustively searching the entire search space."""
-        #TODO: fix this to work.
+        color_map = {}
+        for color in cube:
+            color_map[color] = 0
+        if len(color_map) != 6:
+            return False
+        for color in cube:
+            color_map[color] += 1
+        for color in color_map:
+            if color_map[color] != 4:
+                return False
+
         return True
+
 
     @staticmethod
     def __check_triplet(triplet):
