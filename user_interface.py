@@ -3,11 +3,12 @@
 import random
 
 import math
+import time
 
 from OpenGL.GL import *
 from OpenGL.GLU import *
 
-from direct.showbase.ShowBase import ShowBase
+from direct.showbase.ShowBase import ShowBase, LVecBase4f, GeomLines
 from direct.showbase.DirectObject import DirectObject
 from direct.gui.DirectGui import *
 from direct.interval.IntervalGlobal import *
@@ -29,17 +30,24 @@ from panda3d.core import CollisionNode, CollisionPolygon
 from panda3d.core import Point3
 import sys
 import os
-
+from cube_logic import *
 
 class CubeModel:
     """Contains data and methods for drawing a cube."""
+
+    color_title_map = {"Red": (1, 0, 0),
+                       "Blue": (0, 0, 1),
+                       "Green": (0, 1, 0),
+                       "Yellow": (1, 1, 0),
+                       "White": (1, 1, 1),
+                       "Black": (0, 0, 0)}
 
     def __init__(self):
         """Constructor for CubeDrawer.  Generates all of the points of the cube and stores them
         for quick drawing, as well as a map of each sticker to its proper color."""
         self.color_map = {}
+        self.sticker_nodepath_map = {}
         self.stickers = CubeModel.generate_stickers()
-
         for sticker in self.stickers:
             red = random.random()
             green = random.random()
@@ -47,22 +55,36 @@ class CubeModel:
 
             self.color_map[sticker] = (red, green, blue)
 
-        self.cube_model = self.build_model()
+
+        self.build_model()
 
     def build_model(self):
         """Draws the node path for the cube."""
-
         geom_node = GeomNode('gnode')
         index = 0
-        self.stickers = sorted(self.stickers)
         for sticker in self.stickers:
-
+            geom_node = GeomNode('gnode')
             sticker_geom = self.get_sticker_geom(sticker, self.color_map[sticker])
             geom_node.addGeom(sticker_geom)
+            node_path = render.attachNewNode(geom_node)
+            node_path.setTwoSided(True)
+            self.sticker_nodepath_map[sticker] = node_path
 
-        node_path = render.attachNewNode(geom_node)
-        node_path.setTwoSided(True)
-        return node_path
+    def paint_sticker(self, sticker, color):
+        self.sticker_nodepath_map[sticker].setColor(color[0], color[1], color[2])
+        self.color_map[sticker] = color
+
+    def get_stickers_with_points(self, *points):
+        result = []
+        for sticker in self.stickers:
+            do_continue = False
+            for point in points:
+                if point not in sticker:
+                    do_continue = True
+            if do_continue:
+                continue
+            result.append(sticker)
+        return tuple(result)
 
     @staticmethod
     def get_sticker_geom(sticker, sticker_color):
@@ -89,14 +111,13 @@ class CubeModel:
 
         color_writer.addData3f(sticker_color)
 
-        prim = GeomTriangles(Geom.UH_static)
-        prim.addVertices(0, 1, 2)
-        prim.addVertices(0, 3, 2)
-
-        prim.closePrimitive()
+        triangles = GeomTriangles(Geom.UH_static)
+        triangles.addVertices(0, 1, 2)
+        triangles.addVertices(0, 3, 2)
+        triangles.closePrimitive()
 
         geom = Geom(vertex_data)
-        geom.addPrimitive(prim)
+        geom.addPrimitive(triangles)
 
         return geom
 
@@ -166,18 +187,17 @@ class MyApp(ShowBase):
                         (-0.37, 0.303), (-0.197, 0.45), (0.003, 0.337), (0.207, 0.157), (0.217, -0.167),
                         (-0.01, -0.327), (-0.223, -0.167), (-0.21, 0.16), (0.0, -0.003)]
 
-    face_up_stickers = ((0, 1, 12, 11), (11, 12, 17, 10), (1, 2, 13, 12), (12, 13, 18, 17),
-                        (10, 17, 16, 9), (17, 18, 15, 16), (13, 14, 15, 18), (2, 3, 14, 13),
-                        (9, 16, 7, 8), (16, 15, 6, 7), (14, 5, 6, 15), (3, 4, 5, 14))
+    face_up_zones = ((0, 1, 12, 11), (11, 12, 17, 10), (12, 13, 18, 17), (1, 2, 13, 12),
+                     (10, 17, 16, 9), (17, 18, 15, 16), (13, 14, 15, 18), (2, 3, 14, 13),
+                     (9, 16, 7, 8), (16, 15, 6, 7), (14, 5, 6, 15), (3, 4, 5, 14))
 
-    face_down_stickers = ((11, 17, 9, 10), (0, 12, 17, 11), (0, 1, 13, 12), (1, 2, 3, 14),
-                          (17, 16, 8, 9), (12, 18, 16, 17), (12, 13, 14, 18), (13, 3, 4, 14),
-                          (16, 15, 7, 8), (18, 14, 15, 16), (14, 4, 5, 15), (15, 5, 6, 7))
+    face_down_zones = ((15, 5, 6, 7), (16, 15, 7, 8), (18, 14, 15, 16), (14, 4, 5, 15),
+                       (17, 16, 8, 9), (12, 18, 16, 17), (12, 13, 14, 18), (13, 3, 4, 14),
+                       (11, 17, 9, 10), (0, 12, 17, 11), (0, 1, 13, 12), (1, 2, 3, 13))
 
     def __init__(self):
         """Basic constructor for MyApp."""
         ShowBase.__init__(self)
-        self.camera.setPos(0, -10, 0)
         self.disableMouse()
         self.camera.setPos(0, -10, 0)
         self.cube = CubeModel()
@@ -187,18 +207,18 @@ class MyApp(ShowBase):
         self.taskMgr.add(self.handle_input, "input")
 
         self.add_widgets()
+        self.sticker_map = {}
 
         self.accept('z', lambda: print(self.pivot.getHpr()))
         self.accept('x', lambda: self.move_to(Geometry.get_snapped_angles(self.pivot.getHpr())))
-        self.accept('v', lambda: self.get_nearest_corner())
+        self.accept('v', lambda: print(self.get_nearest_corner()))
         self.accept('mouse1', lambda: self.mouse_click())
 
     def add_widgets(self):
         """Adds the widgets to the window."""
-        self.button = DirectButton(text = ("Solve!"), scale=0.1, pos=(1, 0, 0))
-        self.radio = DirectOptionMenu(text=("Test"), items=["Red", "Blue", "Green"], scale=0.1, pos=(-1, 0, 0))
-        self.label = DirectLabel(text="Here", scale=0.1, pos=(-.8, 0, -.8))
-        self.label2 = DirectLabel(text="test", scale=0.1, pos=(-.8, 0, -.9))
+        self.solve_button = DirectButton(text = ("Solve!"), scale=0.1, pos=(1, 0, 0))
+        self.color_select = DirectOptionMenu(text=("Test"), items=["Red", "Blue", "Green", "Yellow", "White", "Black"], scale=0.1, pos=(-1, 0, 0))
+        self.solution_label = DirectLabel(text="Here", scale=0.1, pos=(-.8, 0, -.8))
 
 
     def handle_input(self, task):
@@ -218,19 +238,16 @@ class MyApp(ShowBase):
         if self.mouseWatcherNode.is_button_down('r'):
             self.pivot.setHpr(self.pivot, (0, 0, -MyApp.rotation_speed))
 
-        self.label['text'] = str(self.pivot.getHpr())
-        self.label2['text'] = str((self.pivot.getR() == 0 and self.pivot.getP() < 0) or
-                                  ((self.pivot.getR() == 180 or self.pivot.getR() == -180) and
-                                   self.pivot.getP() < 0))
-
         return task.cont
 
     def move_to(self, angle):
         """Gradually moves the pivot HPR until it is at the specified angles."""
         i = LerpHprInterval(self.pivot, 0.2, Point3(angle[0], angle[1], angle[2]))
         i.start()
+        self.sticker_map = self.get_sticker_map(angle)
 
     def get_nearest_corner(self):
+        """Returns the corner nearest to the camera."""
         point = render.getRelativePoint(self.pivot, self.camera.getPos())
         nearest = None
         nearest_dist = math.inf
@@ -241,27 +258,88 @@ class MyApp(ShowBase):
                 nearest = candidate
                 nearest_dist = distance
 
-        print(nearest)
+        return nearest
+
+    def get_sticker_map(self, angle):
+        """Returns a map of each sticker to its oriented position id on the screen currently."""
+        sticker_map = {}
+        facing_up = angle[1] < 0
+        left_axis = 0
+        right_axis = 0
+        if angle[0] == -45 or angle[0] == 135:
+            right_axis = 1
+        if angle[0] == 45 or angle[0] == -135:
+            left_axis = 1
+        if left_axis == right_axis:
+            raise Exception("Supplied angle is not correct for generating the sticker map.")
+
+        corner = self.get_nearest_corner()
+        corner_stickers = self.cube.get_stickers_with_points(corner)
+
+        for sticker in corner_stickers:
+            corner_to_mid = Geometry.subtract_vectors(sticker[0], sticker[2])
+            far_corner_point = Geometry.add_vectors(sticker[0], corner_to_mid)
+            far_corner = self.cube.get_stickers_with_points(sticker[0], far_corner_point)[0]
+
+            edges = list(self.cube.get_stickers_with_points(sticker[0]))
+            edges.remove(far_corner)
+            edges.remove(sticker)
+            edges = tuple(edges)
+
+            wing_one = edges[0]
+            wing_two = edges[1]
+            holder = None
+
+            if wing_one[2][2] == wing_two[2][2]:
+                if wing_one[2][left_axis] != sticker[2][left_axis]:
+                    wing_one, wing_two = wing_two, wing_one
+            else:
+                if wing_one[2][2] != sticker[2][2]:
+                    wing_one, wing_two = wing_two, wing_one
+
+            #NOTE: sticker[0] refers to the point on the sticker that is in the middle of a face of the cube.
+            if sticker[0][2] == corner[2]:
+                sticker_map[2] = sticker
+                sticker_map[0] = far_corner
+                sticker_map[1] = wing_one
+                sticker_map[3] = wing_two
+            if sticker[0][left_axis] == corner[left_axis]:
+                sticker_map[5] = sticker
+                sticker_map[8] = far_corner
+                sticker_map[4] = wing_one
+                sticker_map[9] = wing_two
+            if sticker[0][right_axis] == corner[right_axis]:
+                sticker_map[6] = sticker
+                sticker_map[11] = far_corner
+                sticker_map[7] = wing_one
+                sticker_map[10] = wing_two
+
+        return sticker_map
 
     def mouse_click(self):
+        """The method to perform when the left mouse button is clicked."""
+        if self.pivot.getR() != 0:
+            return
         if self.mouseWatcherNode.hasMouse():
             mouse_pos_node = self.mouseWatcherNode.getMouse()
             mouse_pos = (mouse_pos_node.getX(), mouse_pos_node.getY())
-            stickers = []
+            zones = []
             points = []
             if self.pivot.getP() == -35:
-                stickers = MyApp.face_up_stickers
+                zones = MyApp.face_up_zones
                 points = MyApp.face_up_points
             if self.pivot.getP() == 35:
-                stickers = MyApp.face_down_stickers
+                zones = MyApp.face_down_zones
                 points = MyApp.face_down_points
-            for i in range(len(stickers)):
-                quad = stickers[i]
+            for i in range(len(zones)):
+                quad = zones[i]
                 built_quad = (points[quad[0]], points[quad[1]],
                               points[quad[2]], points[quad[3]])
 
                 if Geometry.is_within(mouse_pos, built_quad):
-                    print(i)
+                    color = CubeModel.color_title_map[self.color_select.get()]
+                    self.cube.paint_sticker(self.sticker_map[i], color)
+
 
 
 class Geometry:
@@ -293,9 +371,29 @@ class Geometry:
             raise ValueError("Vector dimensions must match.")
         inner_sum = 0
         for i in range(len(vector1)):
-            inner_sum += pow((vector1[i] - vector2[i]), 2)
+            inner_sum += (vector1[i] - vector2[i]) ** 2
 
         return math.sqrt(inner_sum)
+
+    @staticmethod
+    def subtract_vectors(vector1, vector2):
+        if len(vector1) != len(vector2):
+            raise ValueError("Vector dimensions must match.")
+
+        result = []
+        for i in range(len(vector1)):
+            result.append(vector1[i] - vector2[i])
+        return tuple(result)
+
+    @staticmethod
+    def add_vectors(vector1, vector2):
+        if len(vector1) != len(vector2):
+            raise ValueError("Vector dimensions must match.")
+
+        result = []
+        for i in range(len(vector1)):
+            result.append(vector1[i] + vector2[i])
+        return tuple(result)
 
     @staticmethod
     def is_within(point, quad):
@@ -315,18 +413,11 @@ class Geometry:
         edge_b = Geometry.get_distance(point_c, point_a)
         edge_c = Geometry.get_distance(point_a, point_b)
 
-        return math.acos((pow(edge_b, 2) + pow(edge_c, 2) - pow(edge_a, 2)) / (2 * edge_b * edge_c))
+        return math.acos(((edge_b ** 2) + (edge_c **2) - (edge_a ** 2)) / (2 * edge_b * edge_c))
 
 
-# my_list = []
-# my_set = {}
-# i = 0
-# for point in MyApp.face_up_points:
-#     if point[0] in my_set or point[1] in my_set:
-#         print(str(i) + ", " + str(point))
-#     my_set[point[0]] = 1
-#     my_set[point[1]] = 1
-#     i += 1
+
+
 
 app = MyApp()
 app.run()
