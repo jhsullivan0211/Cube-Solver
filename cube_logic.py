@@ -47,6 +47,8 @@ class Cube:
     solved_tuple = ("up", "front", "left", "up", "left", "back", "up", "back", "right", "up", "right", "front",
                     "down", "left", "front", "down", "back", "left", "down", "right", "back", "down", "front", "right")
 
+    cubies = ((0, 1, 2), (3, 4, 5), (6, 7, 8), (9, 10, 11), (12, 13, 14), (15, 16, 17), (18, 19, 20), (21, 22, 23))
+
     move_dict = {"U": (9, 10, 11, 0, 1, 2, 3, 4, 5, 6, 7, 8,
                        12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23),
                  "R": (0, 1, 2, 3, 4, 5, 11, 9, 10, 22, 23, 21,
@@ -194,6 +196,7 @@ class CubeBuilder:
     this way should be solved using only back, down, and right face turns."""
 
     solve_moves = ["R", "r", "B", "b", "D", "d"]
+
     @staticmethod
     def get_cube_from_colors(colors):
         """Returns a cube built using the specified colors, where the UFR cube is considered already
@@ -265,24 +268,40 @@ class CubeBuilder:
     def __check_validity(cube):
         """Checks the validity of a cube in advance to prevent exhaustively searching the entire search space."""
         color_map = {}
-        for color in cube:
+        for color in cube.configuration:
             color_map[color] = 0
         if len(color_map) != 6:
             return False
-        for color in cube:
+        for color in cube.configuration:
             color_map[color] += 1
         for color in color_map:
             if color_map[color] != 4:
                 return False
 
+        test_cube = []
+        for i in range(0, len(cube.configuration), 3):
+            triplet = (cube.configuration[i], cube.configuration[i + 1], cube.configuration[i + 2])
+
+            for j in range(0, len(cube.configuration), 3):
+                potential = (Cube.solved_tuple[j], Cube.solved_tuple[j + 1], Cube.solved_tuple[j + 2])
+                if CubeBuilder.__check_triplet(triplet, potential):
+                    test_cube.extend(triplet)
+        test_cube = tuple(test_cube)
+        if test_cube != cube.configuration:
+            return False
+
         return True
 
 
     @staticmethod
-    def __check_triplet(triplet):
-        """Checks the validity of a triplet."""
-        #TODO: fix this to work.
-        pass
+    def __check_triplet(triplet, oriented_triplet):
+        """Checks whether the specified triplet is a rotated version of the oriented triplet."""
+        if triplet[0] == oriented_triplet[0]:
+            return triplet[1] == oriented_triplet[1] and triplet[2] == oriented_triplet[2]
+        elif triplet[0] == oriented_triplet[1]:
+            return triplet[1] == oriented_triplet[2] and triplet[2] == oriented_triplet[0]
+        elif triplet[0] == oriented_triplet[2]:
+            return triplet[1] == oriented_triplet[0] and triplet[2] == oriented_triplet[1]
 
 
 class Solver:
@@ -294,7 +313,8 @@ class Solver:
         """Returns a string of moves that will get one from the specified origin state to the specified
         target state, using only the specified moves."""
 
-        solved_set = Solver.__find_target(origin, target, moves)
+        optimized_cube = CubeBuilder.get_cube_from_colors(origin.configuration)
+        solved_set = Solver.__find_target(optimized_cube, target, moves)
 
         if solved_set is None:
             raise ValueError("Cube is unsolvable.")
@@ -361,7 +381,5 @@ class Solver:
             current_parent = current_parent.parent
 
         return chain
-
-
 
 

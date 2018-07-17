@@ -11,6 +11,7 @@ from OpenGL.GLU import *
 from direct.showbase.ShowBase import ShowBase, LVecBase4f, GeomLines
 from direct.showbase.DirectObject import DirectObject
 from direct.gui.DirectGui import *
+from direct.stdpy import threading
 from direct.interval.IntervalGlobal import *
 from panda3d.core import lookAt
 from panda3d.core import GeomVertexFormat, GeomVertexData
@@ -35,12 +36,16 @@ from cube_logic import *
 class CubeModel:
     """Contains data and methods for drawing a cube."""
 
-    color_title_map = {"Red": (1, 0, 0),
-                       "Blue": (0, 0, 1),
-                       "Green": (0, 1, 0),
+    color_title_map = {"Red": (0.8, 0, 0),
+                       "Blue": (0, 0, 0.8),
+                       "Green": (0, 0.6, 0.3),
                        "Yellow": (1, 1, 0),
                        "White": (1, 1, 1),
                        "Black": (0, 0, 0)}
+
+    blank_color = (0.3, 0.3, 0.3)
+    back_color = (0.2, 0.2, 0.2)
+    sticker_scale = 0.9
 
     def __init__(self):
         """Constructor for CubeDrawer.  Generates all of the points of the cube and stores them
@@ -49,32 +54,40 @@ class CubeModel:
         self.sticker_nodepath_map = {}
         self.stickers = CubeModel.generate_stickers()
         for sticker in self.stickers:
-            red = random.random()
-            green = random.random()
-            blue = random.random()
-
-            self.color_map[sticker] = (red, green, blue)
-
+            self.color_map[sticker] = CubeModel.blank_color
 
         self.build_model()
 
     def build_model(self):
         """Draws the node path for the cube."""
-        geom_node = GeomNode('gnode')
-        index = 0
         for sticker in self.stickers:
             geom_node = GeomNode('gnode')
-            sticker_geom = self.get_sticker_geom(sticker, self.color_map[sticker])
+
+            sticker_geom = self.build_sticker_geom(sticker, self.color_map[sticker], CubeModel.sticker_scale)
             geom_node.addGeom(sticker_geom)
             node_path = render.attachNewNode(geom_node)
             node_path.setTwoSided(True)
             self.sticker_nodepath_map[sticker] = node_path
 
+
+            frame_sticker_list = []
+            for point in sticker:
+                frame_sticker_list.append(Geometry.scale_vector(point, 0.99))
+            frame_sticker = tuple(frame_sticker_list)
+
+            frame_node = GeomNode('framenode')
+            frame_geom = self.build_sticker_geom(frame_sticker, CubeModel.back_color, 1)
+            frame_node.addGeom(frame_geom)
+            frame_path = render.attachNewNode(frame_node)
+            frame_path.setTwoSided(True)
+
     def paint_sticker(self, sticker, color):
+        """Paints the specified sticker the specified color."""
         self.sticker_nodepath_map[sticker].setColor(color[0], color[1], color[2])
         self.color_map[sticker] = color
 
     def get_stickers_with_points(self, *points):
+        """Returns all stickers that contain the specified points."""
         result = []
         for sticker in self.stickers:
             do_continue = False
@@ -87,9 +100,10 @@ class CubeModel:
         return tuple(result)
 
     @staticmethod
-    def get_sticker_geom(sticker, sticker_color):
+    def build_sticker_geom(sticker, sticker_color, scalar=1):
         """Builds and returns a Geom composed of the specified points in sticker, colored the specified color."""
 
+        sticker = CubeModel.scale_sticker(sticker, scalar)
         vertex_format = GeomVertexFormat.getV3c4()
         vertex_data = GeomVertexData("vertices", vertex_format, Geom.UHStatic)
         vertex_data.setNumRows(4)
@@ -122,12 +136,19 @@ class CubeModel:
         return geom
 
     @staticmethod
-    def scale_sticker(sticker, scalar):
+    def scale_sticker(sticker, amount):
         result = []
-        for vertex in sticker:
-            scaled = [point * scalar for point in vertex]
-            result.append(tuple(scaled))
-        return result
+
+        for i in range(len(sticker)):
+            j = i + 2
+            if j >= len(sticker):
+                j -= len(sticker)
+
+            movement = Geometry.subtract_vectors(sticker[j], sticker[i])
+            movement = Geometry.scale_vector(movement, 1 - amount)
+            new_point = Geometry.add_vectors(sticker[i], movement)
+            result.append(new_point)
+        return tuple(result)
 
     @staticmethod
     def generate_stickers():
@@ -172,6 +193,120 @@ class CubeModel:
         return result
 
 
+class Geometry:
+    @staticmethod
+    def snap_h(angle, deg=-135):
+        """Returns an angle for heading, snapped to the nearest orientation such that the angle ensures
+        that the cube is in the proper place once the rest of the angles are set."""
+        snap_points = [deg, deg + 90, deg + 180, deg + 270]
+        for i in range(len(snap_points)):
+            if angle < snap_points[i]:
+                if abs(angle - snap_points[i]) < abs(angle - snap_points[i - 1]):
+                    return snap_points[i]
+                else:
+                    return snap_points[i - 1]
+
+        return snap_points[-1]
+
+    @staticmethod
+    def get_snapped_angles(angles):
+        """Returns the angles for heading, pitch, and roll where each is snapped.  The resulting angle puts
+        the cube in the proper orientation for clicking."""
+        result = [Geometry.snap_h(angles[0]), -MyApp.origin_rot[1] if angles[1] >= 0 else MyApp.origin_rot[1], 0]
+        return tuple(result)
+
+    @staticmethod
+    def get_distance(vector1, vector2):
+        """Returns the distance (scalar) between two vectors."""
+        if len(vector1) != len(vector2):
+            raise ValueError("Vector dimensions must match.")
+        inner_sum = 0
+        for i in range(len(vector1)):
+            inner_sum += (vector1[i] - vector2[i]) ** 2
+
+        return math.sqrt(inner_sum)
+
+    @staticmethod
+    def subtract_vectors(vector1, vector2):
+        if len(vector1) != len(vector2):
+            raise ValueError("Vector dimensions must match.")
+
+        result = []
+        for i in range(len(vector1)):
+            result.append(vector1[i] - vector2[i])
+        return tuple(result)
+
+    @staticmethod
+    def add_vectors(vector1, vector2):
+        if len(vector1) != len(vector2):
+            raise ValueError("Vector dimensions must match.")
+
+        result = []
+        for i in range(len(vector1)):
+            result.append(vector1[i] + vector2[i])
+        return tuple(result)
+
+    @staticmethod
+    def scale_vector(vector, scalar):
+        result = []
+        for i in range(len(vector)):
+            result.append(vector[i] * scalar)
+        return tuple(result)
+
+    @staticmethod
+    def is_within(point, quad):
+        """Returns whether the given point lies within the specified quadrilateral."""
+        lines = ((0, 1), (1, 2), (2, 3), (3, 0))
+        angle_sum = 0
+        for line in lines:
+            angle = Geometry.angle_CAB(quad[line[0]], point, quad[line[1]])
+            angle_sum += angle
+
+        return abs(angle_sum - 2 * math.pi) < 0.001
+
+    @staticmethod
+    def angle_CAB(point_c, point_a, point_b):
+        """Returns the angle CAB from points C, A, and B."""
+        edge_a = Geometry.get_distance(point_c, point_b)
+        edge_b = Geometry.get_distance(point_c, point_a)
+        edge_c = Geometry.get_distance(point_a, point_b)
+
+        acos_input = ((edge_b ** 2) + (edge_c **2) - (edge_a ** 2)) / (2 * edge_b * edge_c)
+
+        if acos_input < -1:
+            acos_input = -1
+        if acos_input > 1:
+            acos_input = 1
+        return math.acos(acos_input)
+
+
+class CubeController:
+    def __init__(self, cube_model):
+        self.cube_model = cube_model
+        color_map = cube_model.color_map
+        conversion = (19, 13, 5, 17, 4, 9, 16, 8, 0, 18, 1, 12,
+                      23, 7, 15, 21, 11, 6, 20, 2, 10, 22, 14, 3)
+        self.colors = []
+        stickers = cube_model.stickers
+        for i in conversion:
+            raw_color = color_map[stickers[i]]
+            color_string = ""
+            for key, value in CubeModel.color_title_map.items():
+                if value == raw_color:
+                    color_string = key
+            self.colors.append(color_string)
+
+    def solve(self):
+        try:
+            logical_cube = CubeBuilder.get_cube_from_colors(self.colors)
+            solution = Solver.get_solution(logical_cube, Cube.new_cube())
+            if solution is None:
+                return "Cube is already solved."
+            return solution
+        except ValueError:
+            return "Cube is unsolvable."
+
+
 class MyApp(ShowBase):
     """Runs the UI, which displays the cube."""
 
@@ -195,6 +330,8 @@ class MyApp(ShowBase):
                        (17, 16, 8, 9), (12, 18, 16, 17), (12, 13, 14, 18), (13, 3, 4, 14),
                        (11, 17, 9, 10), (0, 12, 17, 11), (0, 1, 13, 12), (1, 2, 3, 13))
 
+    origin_rot = (-45, -35, 0)
+
     def __init__(self):
         """Basic constructor for MyApp."""
         ShowBase.__init__(self)
@@ -204,47 +341,77 @@ class MyApp(ShowBase):
         self.pivot = render.attachNewNode("pivot")
         self.pivot.setPos((0, 0, 0))
         self.camera.wrtReparentTo(self.pivot)
+        self.pivot.setHpr(MyApp.origin_rot)
         self.taskMgr.add(self.handle_input, "input")
-
+        self.moving = False
         self.add_widgets()
         self.sticker_map = {}
-
-        self.accept('z', lambda: print(self.pivot.getHpr()))
-        self.accept('x', lambda: self.move_to(Geometry.get_snapped_angles(self.pivot.getHpr())))
-        self.accept('v', lambda: print(self.get_nearest_corner()))
-        self.accept('mouse1', lambda: self.mouse_click())
+        self.move_to(MyApp.origin_rot)
+        self.accept('mouse1', self.mouse_click)
 
     def add_widgets(self):
         """Adds the widgets to the window."""
-        self.solve_button = DirectButton(text = ("Solve!"), scale=0.1, pos=(1, 0, 0))
-        self.color_select = DirectOptionMenu(text=("Test"), items=["Red", "Blue", "Green", "Yellow", "White", "Black"], scale=0.1, pos=(-1, 0, 0))
-        self.solution_label = DirectLabel(text="Here", scale=0.1, pos=(-.8, 0, -.8))
+        self.solve_button = DirectButton(text = ("Solve!"),
+                                         command=self.solve_method,
+                                         scale=0.1, pos=(1, 0, 0))
 
+        self.color_select = DirectOptionMenu(text=("Test"),
+                                             items=["Red", "Blue", "Green", "Yellow", "White", "Black"],
+                                             scale=0.1,
+                                             pos=(-1, 0, 0))
+
+        self.solution_label = DirectLabel(text="",
+                                          scale=0.1,
+                                          pos=(0, 0, -.8),
+                                          frameColor=self.getBackgroundColor())
+
+    def solve_method(self):
+        self.move_to(MyApp.origin_rot, self.solve_cube)
+
+    def solve_cube(self):
+        controller = CubeController(self.cube)
+        solution = controller.solve()
+        self.solution_label["text"] = str(solution)
 
     def handle_input(self, task):
         """Listens for input each frame, acting if the input is in process (i.e. a key
         is down, a button pressed, etc.)."""
 
+        no_input = True
         if self.mouseWatcherNode.is_button_down('a'):
             self.pivot.setHpr(self.pivot, (MyApp.rotation_speed, 0, 0))
+            self.moving = True
+            no_input = False
         if self.mouseWatcherNode.is_button_down('d'):
             self.pivot.setHpr(self.pivot, (-MyApp.rotation_speed, 0, 0))
+            self.moving = True
+            no_input = False
         if self.mouseWatcherNode.is_button_down('w'):
             self.pivot.setHpr(self.pivot, (0, MyApp.rotation_speed, 0))
+            self.moving = True
+            no_input = False
         if self.mouseWatcherNode.is_button_down('s'):
             self.pivot.setHpr(self.pivot, (0, -MyApp.rotation_speed, 0))
-        if self.mouseWatcherNode.is_button_down('e'):
-            self.pivot.setHpr(self.pivot, (0, 0, MyApp.rotation_speed))
-        if self.mouseWatcherNode.is_button_down('r'):
-            self.pivot.setHpr(self.pivot, (0, 0, -MyApp.rotation_speed))
+            self.moving = True
+            no_input = False
+        if self.moving and no_input:
+            self.adjust_pivot()
+            self.moving = False
 
         return task.cont
 
-    def move_to(self, angle):
+    def move_to(self, angle, callback=lambda: None):
         """Gradually moves the pivot HPR until it is at the specified angles."""
-        i = LerpHprInterval(self.pivot, 0.2, Point3(angle[0], angle[1], angle[2]))
-        i.start()
+        move = LerpHprInterval(self.pivot, 0.2, Point3(angle[0], angle[1], angle[2]))
+        sequence = Sequence(
+                        move,
+                        Func(callback)
+        )
+        sequence.start()
         self.sticker_map = self.get_sticker_map(angle)
+
+    def adjust_pivot(self):
+        self.move_to(Geometry.get_snapped_angles(self.pivot.getHpr()))
 
     def get_nearest_corner(self):
         """Returns the corner nearest to the camera."""
@@ -339,84 +506,6 @@ class MyApp(ShowBase):
                 if Geometry.is_within(mouse_pos, built_quad):
                     color = CubeModel.color_title_map[self.color_select.get()]
                     self.cube.paint_sticker(self.sticker_map[i], color)
-
-
-
-class Geometry:
-    @staticmethod
-    def snap_h(angle, deg=-135):
-        """Returns an angle for heading, snapped to the nearest orientation such that the angle ensures
-        that the cube is in the proper place once the rest of the angles are set."""
-        snap_points = [deg, deg + 90, deg + 180, deg + 270]
-        for i in range(len(snap_points)):
-            if angle < snap_points[i]:
-                if abs(angle - snap_points[i]) < abs(angle - snap_points[i - 1]):
-                    return snap_points[i]
-                else:
-                    return snap_points[i - 1]
-
-        return snap_points[-1]
-
-    @staticmethod
-    def get_snapped_angles(angles):
-        """Returns the angles for heading, pitch, and roll where each is snapped.  The resulting angle puts
-        the cube in the proper orientation for clicking."""
-        result = [Geometry.snap_h(angles[0]), 35 if angles[1] >= 0 else -35, 0]
-        return tuple(result)
-
-    @staticmethod
-    def get_distance(vector1, vector2):
-        """Returns the distance (scalar) between two vectors."""
-        if len(vector1) != len(vector2):
-            raise ValueError("Vector dimensions must match.")
-        inner_sum = 0
-        for i in range(len(vector1)):
-            inner_sum += (vector1[i] - vector2[i]) ** 2
-
-        return math.sqrt(inner_sum)
-
-    @staticmethod
-    def subtract_vectors(vector1, vector2):
-        if len(vector1) != len(vector2):
-            raise ValueError("Vector dimensions must match.")
-
-        result = []
-        for i in range(len(vector1)):
-            result.append(vector1[i] - vector2[i])
-        return tuple(result)
-
-    @staticmethod
-    def add_vectors(vector1, vector2):
-        if len(vector1) != len(vector2):
-            raise ValueError("Vector dimensions must match.")
-
-        result = []
-        for i in range(len(vector1)):
-            result.append(vector1[i] + vector2[i])
-        return tuple(result)
-
-    @staticmethod
-    def is_within(point, quad):
-        """Returns whether the given point lies within the specified quadrilateral."""
-        lines = ((0, 1), (1, 2), (2, 3), (3, 0))
-        angle_sum = 0
-        for line in lines:
-            angle = Geometry.angle_CAB(quad[line[0]], point, quad[line[1]])
-            angle_sum += angle
-
-        return abs(angle_sum - 2 * math.pi) < 0.001
-
-    @staticmethod
-    def angle_CAB(point_c, point_a, point_b):
-        """Returns the angle CAB from points C, A, and B."""
-        edge_a = Geometry.get_distance(point_c, point_b)
-        edge_b = Geometry.get_distance(point_c, point_a)
-        edge_c = Geometry.get_distance(point_a, point_b)
-
-        return math.acos(((edge_b ** 2) + (edge_c **2) - (edge_a ** 2)) / (2 * edge_b * edge_c))
-
-
-
 
 
 app = MyApp()
