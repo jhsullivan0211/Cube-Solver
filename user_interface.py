@@ -281,6 +281,10 @@ class Geometry:
 
 
 class CubeController:
+
+    already_solved_message = "Cube is already solved."
+    unsolvable_message = "The cube cannot be solved."
+
     def __init__(self, cube_model):
         self.cube_model = cube_model
         color_map = cube_model.color_map
@@ -300,17 +304,19 @@ class CubeController:
         try:
             logical_cube = CubeBuilder.get_cube_from_colors(self.colors)
             solution = Solver.get_solution(logical_cube, Cube.new_cube())
-            if solution is None:
-                return "Cube is already solved."
+
+            if len(solution) == 0:
+                return CubeController.already_solved_message
             return solution
         except ValueError:
-            return "Cube is unsolvable."
+            return CubeController.unsolvable_message
 
 
 class MyApp(ShowBase):
     """Runs the UI, which displays the cube."""
 
-    rotation_speed = 1.5
+    rotation_speed = 120
+    mouse_speed_factor = 1
 
     face_up_points = ((-0.00251, 0.56), (0.1975, 0.453), (0.415, 0.32), (0.395, 0.003), (0.38, -0.287),
                       (0.205, -0.453), (-0.0025, -0.64), (-0.203, -0.45), (-0.375, -0.297), (-0.4, 0),
@@ -335,6 +341,7 @@ class MyApp(ShowBase):
     def __init__(self):
         """Basic constructor for MyApp."""
         ShowBase.__init__(self)
+
         self.disableMouse()
         self.camera.setPos(0, -10, 0)
         self.cube = CubeModel()
@@ -348,30 +355,133 @@ class MyApp(ShowBase):
         self.sticker_map = {}
         self.move_to(MyApp.origin_rot)
         self.accept('mouse1', self.mouse_click)
+        self.previous_click = None
 
     def add_widgets(self):
         """Adds the widgets to the window."""
-        self.solve_button = DirectButton(text = ("Solve!"),
-                                         command=self.solve_method,
-                                         scale=0.1, pos=(1, 0, 0))
 
-        self.color_select = DirectOptionMenu(text=("Test"),
-                                             items=["Red", "Blue", "Green", "Yellow", "White", "Black"],
+        self.solve_button = DirectButton(text = ("Solve!"),
+                                         command=self.move_then_solve,
+                                         scale=0.1,
+                                         pos=(1, 0, 0.7))
+
+
+
+        self.color_select = DirectOptionMenu( items=["Red", "Blue", "Green", "Yellow", "White", "Black"],
                                              scale=0.1,
-                                             pos=(-1, 0, 0))
+                                             pos=(-1.2, 0, 0.7))
+
 
         self.solution_label = DirectLabel(text="",
                                           scale=0.1,
                                           pos=(0, 0, -.8),
                                           frameColor=self.getBackgroundColor())
 
-    def solve_method(self):
+        self.left_label = DirectLabel(text="Left",
+                                      scale=0.1,
+                                      pos=(-0.45, 0, -0.6),
+                                      frameColor=self.getBackgroundColor())
+
+        self.front_label = DirectLabel(text="Front",
+                                      scale=0.1,
+                                      pos=(0.45, 0, -0.6),
+                                      frameColor=self.getBackgroundColor())
+
+        self.up_label = DirectLabel(text="Up",
+                                      scale=0.1,
+                                      pos=(0, 0, 0.65),
+                                      frameColor=self.getBackgroundColor())
+
+        self.case_label = DirectLabel(text="Uppercase: Clockwise\n" +
+                                           "Lowercase: Counter-clockwise",
+                                      scale=0.05,
+                                      pos=(0, 0, -0.9),
+                                      frameColor=self.getBackgroundColor())
+
+
+
+        self.hide_labels()
+
+    def hide_labels(self):
+        self.left_label.hide()
+        self.up_label.hide()
+        self.front_label.hide()
+        self.case_label.hide()
+        self.solution_label["text"] = ""
+
+    def show_labels(self):
+        self.left_label.show()
+        self.front_label.show()
+        self.up_label.show()
+        self.case_label.show()
+
+    def move_then_solve(self):
         self.move_to(MyApp.origin_rot, self.solve_cube)
 
     def solve_cube(self):
+
         controller = CubeController(self.cube)
         solution = controller.solve()
-        self.solution_label["text"] = str(solution)
+        solution_string = ""
+
+        if solution == CubeController.already_solved_message:
+            solution_string = CubeController.already_solved_message
+        elif solution == CubeController.unsolvable_message:
+            solution_string = CubeController.unsolvable_message
+        else:
+            self.show_labels()
+            for i in range(len(solution)):
+                solution_string += solution[i]
+                if i < len(solution) - 1:
+                    solution_string += ", "
+
+        self.solution_label["text"] = solution_string
+
+
+    def mouse_click(self):
+        """The method to perform when the left mouse button is clicked."""
+        if self.pivot.getR() != 0:
+            return
+
+        if self.mouseWatcherNode.hasMouse():
+
+            position = self.mouseWatcherNode.getMouse()
+            mouse_pos = (position.getX(), position.getY())
+            zones = []
+            points = []
+            if self.pivot.getP() == -35:
+                zones = MyApp.face_up_zones
+                points = MyApp.face_up_points
+            if self.pivot.getP() == 35:
+                zones = MyApp.face_down_zones
+                points = MyApp.face_down_points
+            clicked_sticker = False
+            for i in range(len(zones)):
+                quad = zones[i]
+                built_quad = (points[quad[0]], points[quad[1]],
+                              points[quad[2]], points[quad[3]])
+
+                if Geometry.is_within(mouse_pos, built_quad):
+                    color = CubeModel.color_title_map[self.color_select.get()]
+                    self.cube.paint_sticker(self.sticker_map[i], color)
+                    clicked_sticker = True
+            if not clicked_sticker:
+                self.previous_click = (position[0], position[1])
+                self.taskMgr.add(self.mouse_down_loop, "click")
+
+    def mouse_down_loop(self, task):
+        #NOTE: currently, prior is a list, i.e. mutable.
+
+        position = self.mouseWatcherNode.getMouse()
+        delta_x = position[0] - self.previous_click[0]
+        delta_y = position[1] - self.previous_click[1]
+        self.pivot.setHpr(self.pivot, (-delta_x * MyApp.rotation_speed, delta_y * MyApp.rotation_speed, 0))
+        self.previous_click = (position[0], position[1])
+        if not self.mouseWatcherNode.is_button_down('mouse1'):
+            self.adjust_pivot()
+            return task.done
+
+        return task.cont
 
     def handle_input(self, task):
         """Listens for input each frame, acting if the input is in process (i.e. a key
@@ -401,17 +511,23 @@ class MyApp(ShowBase):
         return task.cont
 
     def move_to(self, angle, callback=lambda: None):
-        """Gradually moves the pivot HPR until it is at the specified angles."""
+        """Gradually moves the pivot HPR until it is at the specified angles.  Optionally calls the specified
+        callback when the movement is finished."""
+
         move = LerpHprInterval(self.pivot, 0.2, Point3(angle[0], angle[1], angle[2]))
         sequence = Sequence(
                         move,
+                        Wait(0.2),
                         Func(callback)
         )
         sequence.start()
         self.sticker_map = self.get_sticker_map(angle)
 
-    def adjust_pivot(self):
-        self.move_to(Geometry.get_snapped_angles(self.pivot.getHpr()))
+    def adjust_pivot(self, callback=lambda: None):
+        """Moves the cube to the nearest fixed orientation.  Optionally calls the specified callback when the
+        movement is finished."""
+        self.hide_labels()
+        self.move_to(Geometry.get_snapped_angles(self.pivot.getHpr()), callback)
 
     def get_nearest_corner(self):
         """Returns the corner nearest to the camera."""
@@ -482,30 +598,6 @@ class MyApp(ShowBase):
                 sticker_map[10] = wing_two
 
         return sticker_map
-
-    def mouse_click(self):
-        """The method to perform when the left mouse button is clicked."""
-        if self.pivot.getR() != 0:
-            return
-        if self.mouseWatcherNode.hasMouse():
-            mouse_pos_node = self.mouseWatcherNode.getMouse()
-            mouse_pos = (mouse_pos_node.getX(), mouse_pos_node.getY())
-            zones = []
-            points = []
-            if self.pivot.getP() == -35:
-                zones = MyApp.face_up_zones
-                points = MyApp.face_up_points
-            if self.pivot.getP() == 35:
-                zones = MyApp.face_down_zones
-                points = MyApp.face_down_points
-            for i in range(len(zones)):
-                quad = zones[i]
-                built_quad = (points[quad[0]], points[quad[1]],
-                              points[quad[2]], points[quad[3]])
-
-                if Geometry.is_within(mouse_pos, built_quad):
-                    color = CubeModel.color_title_map[self.color_select.get()]
-                    self.cube.paint_sticker(self.sticker_map[i], color)
 
 
 app = MyApp()

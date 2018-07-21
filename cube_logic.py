@@ -35,6 +35,8 @@ mapping of sticker positions to indexes:
 {0=ULF, 1=ULB, 2=URB, 3=URF, 4=FUL, 5=LUF, 6=LUB, 7=BLU, 8=BRU, 9=RUB, 10=RUF, 11=FUR, 12=FDL,
 13=LDF, 14=LDB, 15=BDL, 16=BDR, 17=RDB, 18=RDF, 19=FDR, 20=DFL, 21=DBL, 22 = DBR, 23=DFR}"""
 
+import time
+import random
 
 class Cube:
     """
@@ -44,8 +46,18 @@ class Cube:
     the cube.
     """
 
-    solved_tuple = ("up", "front", "left", "up", "left", "back", "up", "back", "right", "up", "right", "front",
-                    "down", "left", "front", "down", "back", "left", "down", "right", "back", "down", "front", "right")
+    up_symbol = "up"
+    front_symbol = "front"
+    left_symbol = "left"
+    right_symbol = "right"
+    back_symbol = "back"
+    down_symbol = "down"
+    symbol_set = (up_symbol, front_symbol, left_symbol, right_symbol, back_symbol, down_symbol)
+
+    solved_tuple = (up_symbol, front_symbol, left_symbol, up_symbol, left_symbol, back_symbol, up_symbol, back_symbol,
+                    right_symbol, up_symbol, right_symbol, front_symbol, down_symbol, left_symbol, front_symbol,
+                    down_symbol, back_symbol, left_symbol, down_symbol, right_symbol, back_symbol,
+                    down_symbol, front_symbol, right_symbol)
 
     cubies = ((0, 1, 2), (3, 4, 5), (6, 7, 8), (9, 10, 11), (12, 13, 14), (15, 16, 17), (18, 19, 20), (21, 22, 23))
 
@@ -72,14 +84,35 @@ class Cube:
                  "b": (0, 1, 2, 17, 15, 16, 4, 5, 3, 9, 10, 11,
                        12, 13, 14, 19, 20, 18, 8, 6, 7, 21, 22, 23),
                  "d": (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
-                       21, 22, 23, 12, 13, 14, 15, 16, 17, 18, 19, 20)}
+                       21, 22, 23, 12, 13, 14, 15, 16, 17, 18, 19, 20),
+                 "R2": (0, 1, 2, 3, 4, 5, 21, 22, 23, 18, 19, 20,
+                        12, 13, 14, 15, 16, 17, 9, 10, 11, 6, 7, 8),
+                 "U2": (6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4, 5,
+                        12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23),
+                 "L2": (15, 16, 17, 12, 13, 14, 6, 7, 8, 9, 10, 11,
+                        3, 4, 5, 0, 1, 2, 18, 19, 20, 21, 22, 23),
+                 "F2": (21, 22, 23, 3, 4, 5, 6, 7, 8, 12, 13, 14,
+                        9, 10, 11, 15, 16, 17, 18, 19, 20, 0, 1, 2),
+                 "B2": (0, 1, 2, 18, 19, 20, 15, 16, 17, 9, 10, 11,
+                        12, 13, 14, 6, 7, 8, 3, 4, 5, 21, 22, 23),
+                 "D2": (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+                        18, 19, 20, 21, 22, 23, 12, 13, 14, 15, 16, 17)}
 
     symbol_count = len(solved_tuple)
 
     maximum_moves = 14
 
     def __init__(self, configuration):
-        """A basic constructor for the Cube class."""
+        """A basic constructor for the Cube class.
+
+        Parameters
+        ----------
+        configuration : tuple
+                        A tuple of symbols representing the direction a sticker points in the solved state.  For
+                        example, if the symbol at a specific index (i.e. position on the cube) matches
+                        Cube.front_symbol, then when solved that sticker should be on the front of the cube.
+
+        """
         if len(configuration) != 24:
             raise ValueError("Must use a tuple of size 24.")
         self.configuration = configuration
@@ -92,24 +125,53 @@ class Cube:
         return hash(self.configuration)
 
     def __eq__(self, other):
-        """Cubes with matching configurations are considered equal."""
+        """Cubes with matching configurations are considered equal.
+
+        Parameters
+        ----------
+        other : Cube
+                The cube to which to check equivalence.
+        """
         return self.__class__ == other.__class__ and \
                self.configuration == other.configuration
 
     def do_move(self, move):
-        """Performs the specified move on the cube."""
+        """Performs the specified move on the cube.
+
+        Parameters
+        ----------
+        move :  str
+                The symbol defining the move.  Possible move strings are found as keys in Cube.move_dict, and
+                currently contain the following:  "U", "u", "R", "r", "D", "d", "L", "l", "F", "f", "B", "b".
+                Uppercase moves denote clockwise turns, lowercase denote counterclockwise turns.
+        """
         if move in Cube.move_dict:
             self.configuration = Cube.__permute(self.configuration, Cube.move_dict[move])
         else:
             raise ValueError("Unknown move \"" + move + "\" supplied.")
 
     def do_moves(self, moves):
-        """Performs the specified moves on the cube."""
+        """Performs the specified moves on the cube.
+
+        Parameters
+        ----------
+        moves :  iterable<str>
+                An iterable of symbols defining the moves to be performed.  Possible move strings are found as keys in
+                Cube.move_dict, and currently contain the following:  "U", "u", "R", "r", "D", "d", "L", "l", "F", "f",
+                 "B", "b".  Uppercase moves denote clockwise turns, lowercase denote counterclockwise turns."""
+
         for move in moves:
             self.do_move(move)
 
     def set_marker(self, marker):
-        """Sets the 'marker' field, which denotes which move produced the current state."""
+        """Sets the 'marker' field, which denotes which move produced the current state.
+        
+        Parameters
+        ----------
+        marker : str
+                 The value to which to set self.marker.
+        """
+        
         self.marker = marker
 
     @staticmethod
@@ -119,7 +181,15 @@ class Cube:
 
     @staticmethod
     def invert_move(move_str):
-        """Given a move, returns its inverse."""
+        """Given a move, returns its inverse.
+
+        Parameters
+        ----------
+        move_str :  str
+                    The move to invert.
+        """
+        if len(move_str) == 2:
+            return move_str
         if move_str.islower():
             return move_str.upper()
         else:
@@ -128,7 +198,17 @@ class Cube:
     @staticmethod
     def __permute(group, order):
         """Permutes the specified group by setting the index of each element
-        to the corresponding index specified in the order argument."""
+        to the corresponding index specified in the order argument.
+
+        Parameters
+        ----------
+        group : iterable<str>
+                A collection of strings, which will be permuted.
+
+        order : tuple
+                An ordered collection of indices, which represent the resulting indices of the members of group.
+
+        """
         return tuple(group[i] for i in order)
 
 
@@ -136,7 +216,17 @@ class Searcher:
     """A class which offers up elements according to breadth-first traversal using a cube's implicit graph."""
 
     def __init__(self, start, search_moves=None):
-        """A basic constructor for the Searcher class."""
+        """A basic constructor for the Searcher class.
+
+        Parameters
+        ----------
+        start : Cube
+                The starting Cube configuration.
+
+        search_moves : collection<str>
+                       A collection of moves to try when performing breadth-first search.
+        """
+
         self.currentLayer = [start]
         self.nextLayer = []
         self.visited = {}
@@ -172,7 +262,16 @@ class Searcher:
         cube states reachable by doing one of the moves specified in the search_moves
         argument.  Sets the marker of the discovered child to be the move that produced it,
         and sets the parent of the discovered child to be the parent that produced it.
-        Defaults to doing all possible moves if no search moves are specified."""
+        Defaults to doing all possible moves if no search moves are specified.
+
+        Parameters
+        ----------
+        cube : Cube
+                The cube from which to get the children.
+
+        search_moves :  collection<str>
+                        A collection of moves to perform to create children.
+        """
         result = []
         if search_moves is None:
             search_moves = Cube.move_dict
@@ -195,12 +294,18 @@ class CubeBuilder:
     already solved, determining the rest of the colors' solved locations from that one.  Cubes built
     this way should be solved using only back, down, and right face turns."""
 
-    solve_moves = ["R", "r", "B", "b", "D", "d"]
+    solve_moves = ["R", "r", "F", "f", "U", "u"]
 
     @staticmethod
     def get_cube_from_colors(colors):
         """Returns a cube built using the specified colors, where the UFR cube is considered already
-        solved and the rest of the colors assigned using that assumption."""
+        solved and the rest of the colors assigned using that assumption.
+
+        Parameters
+        ----------
+        colors :    iterable<str>
+                    An ordered collection of symbols, to be formed into a Cube configuration.
+        """
         symbol_dict = CubeBuilder.__get_symbols(colors)
 
         translate_list = []
@@ -216,37 +321,51 @@ class CubeBuilder:
 
     @staticmethod
     def __get_symbols(colors):
-        """Returns a mapping of colors from the specified list to direction strings, which
-        match the strings used in the configurations of the Cube class."""
+        """Returns a mapping of colors from the specified list to direction strings (e.g. "up", "right", etc.),
+        which match the strings used in the configurations of the Cube class.
 
-        up_symbol = colors[0]
-        front_symbol = colors[1]
-        left_symbol = colors[2]
-        back_symbol = None
+        Parameters
+        ----------
+        colors : iterable<str>
+                 An ordered collection of symbols, to be mapped onto cube directions (e.g. "up", "front", etc.)
+        """
+
+        down_symbol = colors[15]
+        back_symbol = colors[16]
+        left_symbol = colors[17]
+        up_symbol = None
         right_symbol = None
-        down_symbol = None
-        i = 3
-        j = 6
+        front_symbol = None
+
+        i = 0
+        j = 3
+
         while j <= 24:
+            if i == 15:
+                i += 3
+                j += 3
+                continue
+
             triplet = colors[i:j]
-            if back_symbol is None:
-                back_symbol = CubeBuilder.__get_third(triplet, up_symbol, left_symbol)
+            if up_symbol is None:
+                up_symbol = CubeBuilder.__get_third(triplet, left_symbol, back_symbol)
 
             if right_symbol is None:
-                right_symbol = CubeBuilder.__get_third(triplet, up_symbol, front_symbol)
+                right_symbol = CubeBuilder.__get_third(triplet, down_symbol, back_symbol)
 
-            if down_symbol is None:
-                down_symbol = CubeBuilder.__get_third(triplet, front_symbol, left_symbol)
+            if front_symbol is None:
+                front_symbol = CubeBuilder.__get_third(triplet, down_symbol, left_symbol)
 
             i += 3
             j += 3
 
-        symbols = {up_symbol: "up",
-                   right_symbol: "right",
-                   left_symbol: "left",
-                   front_symbol: "front",
-                   back_symbol: "back",
-                   down_symbol: "down"}
+        symbols = {up_symbol: Cube.up_symbol,
+                   right_symbol: Cube.right_symbol,
+                   left_symbol: Cube.left_symbol,
+                   front_symbol: Cube.front_symbol,
+                   back_symbol: Cube.back_symbol,
+                   down_symbol: Cube.down_symbol}
+
 
         for symbol in symbols:
             if symbol is None:
@@ -257,7 +376,19 @@ class CubeBuilder:
     @staticmethod
     def __get_third(triplet, first, second):
         """Given a collection of three things and the first thing and second thing, returns the third thing
-        in the collection."""
+        in the collection.
+
+        Parameters
+        ----------
+        triplet :   iterable
+                    An iterable of size 3 containing the following two arguments, as well as a third.
+
+        first :     object
+                    The first object, found in the triplet parameter and so not returned.
+
+        second :    ohject
+                    The second object, found in the triplet parameter and so not returned.
+        """
         if first in triplet and second in triplet:
             for thing in triplet:
                 if thing != first and thing != second:
@@ -266,7 +397,13 @@ class CubeBuilder:
 
     @staticmethod
     def __check_validity(cube):
-        """Checks the validity of a cube in advance to prevent exhaustively searching the entire search space."""
+        """Checks the validity of a cube in advance to prevent exhaustively searching the entire search space.
+
+        Parameters
+        ----------
+        cube :  Cube
+                The Cube for which to check the validity."""
+
         color_map = {}
         for color in cube.configuration:
             color_map[color] = 0
@@ -292,16 +429,24 @@ class CubeBuilder:
 
         return True
 
-
     @staticmethod
     def __check_triplet(triplet, oriented_triplet):
-        """Checks whether the specified triplet is a rotated version of the oriented triplet."""
+        """Checks whether the specified triplet is a rotated version of the oriented triplet.
+
+        Parameters
+        ----------
+        triplet :           iterable
+                            The actual values of a given cubie.
+        oriented_triplet :  iterable
+                            The oriented value of the cubie, to be checked against.
+        """
         if triplet[0] == oriented_triplet[0]:
             return triplet[1] == oriented_triplet[1] and triplet[2] == oriented_triplet[2]
         elif triplet[0] == oriented_triplet[1]:
             return triplet[1] == oriented_triplet[2] and triplet[2] == oriented_triplet[0]
         elif triplet[0] == oriented_triplet[2]:
             return triplet[1] == oriented_triplet[0] and triplet[2] == oriented_triplet[1]
+        return False
 
 
 class Solver:
@@ -310,14 +455,26 @@ class Solver:
 
     @staticmethod
     def get_solution(origin, target, moves=CubeBuilder.solve_moves):
-        """Returns a string of moves that will get one from the specified origin state to the specified
-        target state, using only the specified moves."""
+        """Given two cubes, returns a string of moves that will get one from the origin cube to the target cube,
+        using only the specified moves.
+
+        Parameters
+        ----------
+        origin : Cube
+                 The Cube representing the starting state.
+        target : Cube
+                 The cube representin typically representing the solved state.
+        moves : iterable<str>
+                An ordered collection of moves which represent the possible moves to do.  Defaults to
+                the moves specified by CubeBuilder.solve_moves, a restricted set of moves to optimize the
+                search algorithm.
+        """
 
         optimized_cube = CubeBuilder.get_cube_from_colors(origin.configuration)
         solved_set = Solver.__find_target(optimized_cube, target, moves)
 
         if solved_set is None:
-            raise ValueError("Cube is unsolvable.")
+            raise ValueError("CubeError: Cube is unsolvable.")
 
         front = solved_set[0]
         back = solved_set[1]
@@ -326,12 +483,12 @@ class Solver:
 
         solution = []
         for link in reversed(front_chain):
-            if link.marker is not None:
-                solution += link.marker
+            if link.marker != "":
+                solution.append(link.marker)
 
         for link in back_chain:
-            if link.marker is not None:
-                solution += Cube.invert_move(link.marker)
+            if link.marker != "":
+                solution.append(Cube.invert_move(link.marker))
 
         return solution
 
@@ -342,7 +499,19 @@ class Solver:
         by starting at the back (i.e. solved) state, meeting in the middle somewhere.  These c
         ube configurations are the same, but have different parent chains, so following both
         chains will lead to the front and back of the search.  Returns the pair as a pair like
-        so: (front-found, back-found)."""
+        so: (front-found, back-found).
+
+        Parameters
+        ----------
+        origin : Cube
+                 The Cube representing the starting state.
+        target : Cube
+                 The cube representin typically representing the solved state.
+        moves : iterable<str>
+                An ordered collection of moves which represent the possible moves to do.  Defaults to
+                the moves specified by CubeBuilder.solve_moves, a restricted set of moves to optimize the
+                search algorithm.
+        """
 
         front_searcher = Searcher(origin, search_moves)
         back_searcher = Searcher(target, search_moves)
@@ -372,7 +541,13 @@ class Solver:
 
     @staticmethod
     def __get_parent_chain(target):
-        """Returns a list representing the chain of parents from the specified cube until the root."""
+        """Returns a list representing the chain of parents from the specified cube until the root.
+
+        Parameters
+        ----------
+        target : Cube
+                 The Cube from which to build the parent chain.
+        """
         chain = []
         current_parent = target
 
@@ -381,5 +556,4 @@ class Solver:
             current_parent = current_parent.parent
 
         return chain
-
 
