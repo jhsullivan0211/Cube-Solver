@@ -5,7 +5,7 @@ as well as the algorithms representing the different possible moves of the cube.
 Additionally, contains algorithms to solve the cube optimally (i.e. the shortest
 number moves) using a two-way variant of breadth-first search.  The cube is
 represented as a length-24 array of direction labels (e.g. "up", "left", etc.), where each
-label represents the color that would be found in the solved cube on the face in that
+label corresponds to the color that would be found in the solved cube on the face in that
 particular direction.  The solved cube would have all of the "up" labels at indices
 that correspond to the upper face of the cube, all the "left" on the left face, and so forth.
 
@@ -35,8 +35,6 @@ mapping of sticker positions to indexes:
 {0=ULF, 1=ULB, 2=URB, 3=URF, 4=FUL, 5=LUF, 6=LUB, 7=BLU, 8=BRU, 9=RUB, 10=RUF, 11=FUR, 12=FDL,
 13=LDF, 14=LDB, 15=BDL, 16=BDR, 17=RDB, 18=RDF, 19=FDR, 20=DFL, 21=DBL, 22 = DBR, 23=DFR}"""
 
-import time
-import random
 
 class Cube:
     """
@@ -52,14 +50,11 @@ class Cube:
     right_symbol = "right"
     back_symbol = "back"
     down_symbol = "down"
-    symbol_set = (up_symbol, front_symbol, left_symbol, right_symbol, back_symbol, down_symbol)
 
     solved_tuple = (up_symbol, front_symbol, left_symbol, up_symbol, left_symbol, back_symbol, up_symbol, back_symbol,
                     right_symbol, up_symbol, right_symbol, front_symbol, down_symbol, left_symbol, front_symbol,
                     down_symbol, back_symbol, left_symbol, down_symbol, right_symbol, back_symbol,
                     down_symbol, front_symbol, right_symbol)
-
-    cubies = ((0, 1, 2), (3, 4, 5), (6, 7, 8), (9, 10, 11), (12, 13, 14), (15, 16, 17), (18, 19, 20), (21, 22, 23))
 
     move_dict = {"U": (9, 10, 11, 0, 1, 2, 3, 4, 5, 6, 7, 8,
                        12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23),
@@ -98,8 +93,6 @@ class Cube:
                  "D2": (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
                         18, 19, 20, 21, 22, 23, 12, 13, 14, 15, 16, 17)}
 
-    symbol_count = len(solved_tuple)
-
     maximum_moves = 14
 
     def __init__(self, configuration):
@@ -121,16 +114,28 @@ class Cube:
         self.orienting_moves = []
 
     def __hash__(self):
-        """Cubes with matching configurations hash the same way."""
+        """Returns the hash value of the Cube, which matches the hash value of its configuration.
+
+        Returns
+        -------
+        int
+            The hashed value of the Cube, which matches the hash value of its configuration.
+        """
         return hash(self.configuration)
 
     def __eq__(self, other):
-        """Cubes with matching configurations are considered equal.
+        """Returns whether this Cube is equal to the specified other cube, which is determined by whether
+        their configurations match (NOT whether they are the same object).
 
         Parameters
         ----------
         other : Cube
                 The cube to which to check equivalence.
+
+        Returns
+        -------
+        bool
+            True if this cube is equal to the other cube, False if not.
         """
         return self.__class__ == other.__class__ and \
                self.configuration == other.configuration
@@ -155,7 +160,7 @@ class Cube:
 
         Parameters
         ----------
-        moves :  iterable<str>
+        moves :  iterable of str
                 An iterable of symbols defining the moves to be performed.  Possible move strings are found as keys in
                 Cube.move_dict, and currently contain the following:  "U", "u", "R", "r", "D", "d", "L", "l", "F", "f",
                  "B", "b".  Uppercase moves denote clockwise turns, lowercase denote counterclockwise turns."""
@@ -176,17 +181,28 @@ class Cube:
 
     @staticmethod
     def new_cube():
-        """Returns a new Cube with a solved configuration."""
+        """Returns a new Cube with a solved configuration.
+
+        Returns
+        -------
+        Cube
+            A new cube with a solved configuration."""
         return Cube(Cube.solved_tuple)
 
     @staticmethod
     def invert_move(move_str):
-        """Given a move, returns its inverse.
+        """Returns the inverse of the provided move.  NOTE: here, 'move' refers to a symbol found as one of
+        the keys in self.move_dict.
 
         Parameters
         ----------
         move_str :  str
                     The move to invert.
+
+        Returns
+        -------
+        str
+            The inverted move symbol.
         """
         if len(move_str) == 2:
             return move_str
@@ -197,23 +213,28 @@ class Cube:
 
     @staticmethod
     def __permute(group, order):
-        """Permutes the specified group by setting the index of each element
-        to the corresponding index specified in the order argument.
+        """Returns a permutation of the specified group by putting each element at index i of the group tuple
+        into a new tuple at the index specified by the value at index i of the order tuple.
 
         Parameters
         ----------
-        group : iterable<str>
+        group : iterable of str
                 A collection of strings, which will be permuted.
 
         order : tuple
                 An ordered collection of indices, which represent the resulting indices of the members of group.
 
+        Returns
+        -------
+        tuple of str
+            The tuple that results from performing the specified permutation.
         """
         return tuple(group[i] for i in order)
 
 
 class Searcher:
-    """A class which offers up elements according to breadth-first traversal using a cube's implicit graph."""
+    """A class which offers up elements according to breadth-first traversal through a Cube's implicit graph
+    formed by doing each of the Cube's possible moves (or optionally specified moves)."""
 
     def __init__(self, start, search_moves=None):
         """A basic constructor for the Searcher class.
@@ -223,7 +244,7 @@ class Searcher:
         start : Cube
                 The starting Cube configuration.
 
-        search_moves : collection<str>
+        search_moves : collection of str
                        A collection of moves to try when performing breadth-first search.
         """
 
@@ -235,7 +256,13 @@ class Searcher:
         self.search_moves = search_moves
 
     def get_next(self):
-        """Returns the next element according to breadth-first traversal"""
+        """Returns the next element (i.e. Cube) according to breadth-first traversal.
+
+        Returns
+        -------
+        Cube
+            The next element according to breadth-first traversal."""
+
         if self.count >= len(self.currentLayer):
             self.currentLayer = self.nextLayer
             self.nextLayer = []
@@ -258,7 +285,7 @@ class Searcher:
 
     @staticmethod
     def get_cube_children(cube, search_moves=None):
-        """Gets the children of the cube, where children here means all of the
+        """Returns the children of the cube, where children here means all of the
         cube states reachable by doing one of the moves specified in the search_moves
         argument.  Sets the marker of the discovered child to be the move that produced it,
         and sets the parent of the discovered child to be the parent that produced it.
@@ -269,8 +296,13 @@ class Searcher:
         cube : Cube
                 The cube from which to get the children.
 
-        search_moves :  collection<str>
+        search_moves :  collection of str
                         A collection of moves to perform to create children.
+
+        Returns
+        -------
+        list of Cube
+            A list composed of Cubes with configurations reachable from the specified Cube's configuration.
         """
         result = []
         if search_moves is None:
@@ -303,8 +335,13 @@ class CubeBuilder:
 
         Parameters
         ----------
-        colors :    iterable<str>
+        colors :    iterable of str
                     An ordered collection of symbols, to be formed into a Cube configuration.
+
+        Returns
+        -------
+        Cube
+            The cube built using the specified colors.
         """
         symbol_dict = CubeBuilder.__get_symbols(colors)
 
@@ -326,8 +363,13 @@ class CubeBuilder:
 
         Parameters
         ----------
-        colors : iterable<str>
+        colors : iterable of str
                  An ordered collection of symbols, to be mapped onto cube directions (e.g. "up", "front", etc.)
+
+        Returns
+        -------
+        dict
+            A dictionary mapping the specified colors to direction strings.
         """
 
         down_symbol = colors[15]
@@ -388,6 +430,11 @@ class CubeBuilder:
 
         second :    ohject
                     The second object, found in the triplet parameter and so not returned.
+
+        Returns
+        -------
+        object
+            The third object in the triplet.
         """
         if first in triplet and second in triplet:
             for thing in triplet:
@@ -402,7 +449,12 @@ class CubeBuilder:
         Parameters
         ----------
         cube :  Cube
-                The Cube for which to check the validity."""
+                The Cube for which to check the validity.
+
+        Returns
+        -------
+        bool
+            Returns whether the specified Cube is valid or not."""
 
         color_map = {}
         for color in cube.configuration:
@@ -439,6 +491,11 @@ class CubeBuilder:
                             The actual values of a given cubie.
         oriented_triplet :  iterable
                             The oriented value of the cubie, to be checked against.
+
+        Returns
+        -------
+        bool
+            Whether the specified triplet is a rotated version of the oriented triplet.
         """
         if triplet[0] == oriented_triplet[0]:
             return triplet[1] == oriented_triplet[1] and triplet[2] == oriented_triplet[2]
@@ -462,16 +519,23 @@ class Solver:
         ----------
         origin : Cube
                  The Cube representing the starting state.
+
         target : Cube
                  The cube representin typically representing the solved state.
-        moves : iterable<str>
+
+        moves : iterable of str
                 An ordered collection of moves which represent the possible moves to do.  Defaults to
                 the moves specified by CubeBuilder.solve_moves, a restricted set of moves to optimize the
                 search algorithm.
+
+        Returns
+        -------
+        str
+            A string showing the solution to get from origin to target.
         """
 
         optimized_cube = CubeBuilder.get_cube_from_colors(origin.configuration)
-        solved_set = Solver.__find_target(optimized_cube, target, moves)
+        solved_set = Solver.__find_matching_middle(optimized_cube, target, moves)
 
         if solved_set is None:
             raise ValueError("CubeError: Cube is unsolvable.")
@@ -493,24 +557,33 @@ class Solver:
         return solution
 
     @staticmethod
-    def __find_target(origin, target, search_moves=None):
-        """Performs two-way breadth-first search to find a pair of matching cube states,
-        one reached by starting the search at the front (i.e. unsolved) state and one reached
-        by starting at the back (i.e. solved) state, meeting in the middle somewhere.  These c
-        ube configurations are the same, but have different parent chains, so following both
-        chains will lead to the front and back of the search.  Returns the pair as a pair like
-        so: (front-found, back-found).
+    def __find_matching_middle(origin, target, search_moves=None):
+        """Performs two-way breadth-first search to find a pair of matching cube states (Cube
+        objects with specific configurations generated during the search), one reached by starting
+        the search at the front (i.e. unsolved) state and one reached by starting at the back (i.e.
+        solved) state, meeting in the middle somewhere.  These cube configurations are the same, but
+        have different parent chains, so following both chains will lead to the front and back of the
+        search.  Returns the pair as a pair like so: (front-found, back-found).
 
         Parameters
         ----------
         origin : Cube
                  The Cube representing the starting state.
+
         target : Cube
                  The cube representin typically representing the solved state.
-        moves : iterable<str>
+
+        moves : iterable of str
                 An ordered collection of moves which represent the possible moves to do.  Defaults to
                 the moves specified by CubeBuilder.solve_moves, a restricted set of moves to optimize the
                 search algorithm.
+
+        Returns
+        -------
+        tuple of Cube
+            Returns a tuple of two cubes, the first of which was found by searching from the front (i.e.
+            from the origin state), the second found by searching from the back (i.e. from the target state).
+
         """
 
         front_searcher = Searcher(origin, search_moves)
@@ -547,6 +620,11 @@ class Solver:
         ----------
         target : Cube
                  The Cube from which to build the parent chain.
+
+        Returns
+        -------
+        list of Cube
+            A list of Cube objects representing the chain of parents from the specified cube until the root.
         """
         chain = []
         current_parent = target
