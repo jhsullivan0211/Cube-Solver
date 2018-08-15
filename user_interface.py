@@ -470,7 +470,7 @@ class Geometry:
             The point resulting from the movement."""
 
         angle = math.radians(direction)
-        return origin[0] + math.cos(angle) * magnitude, origin[1] + math.sin(angle) * magnitude
+        return origin[0] + math.cos(angle) * magnitude * 3/4, origin[1] + math.sin(angle) * magnitude
 
     @staticmethod
     def get_diamond(origin, angle, side_length):
@@ -506,7 +506,7 @@ class CubeController:
     """A mediator between the GUI of this module (specifically the CubeModel class) and the cube_logic module which
     has the capability to build and solve the logical cube."""
 
-    _already_solved_message = "Cube is already solved."
+    _already_solved_message = "The cube is already solved."
     _unsolvable_message = "This cube is impossible to solve."
 
     def __init__(self, cube_model):
@@ -563,7 +563,7 @@ class MainGUI(ShowBase):
 
     rotation_speed = 120
     mouse_speed_factor = 1
-    screen_sticker_edge = 0.272
+    screen_sticker_edge = 0.29
     origin_rot = (-45, -35, 0)
 
     def __init__(self):
@@ -584,25 +584,24 @@ class MainGUI(ShowBase):
         self._add_widgets()
         self.sticker_map = {}
         self.move_to(MainGUI.origin_rot, self.update_sticker_map)
-        self.accept('mouse1', self.mouse_click)
+        self.accept('mouse1', self._mouse_click)
         self.previous_click = None
         self.taskMgr.add(self._lock_format, "format lock")
-        self.face_up_zones = MainGUI.build_zones(90)
-        self.face_down_zones = MainGUI.build_zones(-90)
-        self.debug_mark((1, .99))
-
+        self.face_up_zones = MainGUI._build_zones(90)
+        self.face_down_zones = MainGUI._build_zones(-90)
 
     def debug_mark(self, position):
-        self.mark = DirectLabel(text=".",
-                                scale=0.1,
-                                pos=(position[0] * 8/6, 0, position[1]),
-                                frameColor=self.getBackgroundColor())
-        print(position)
+        """Adds a mark to the specified position on the screen.  Useful for debugging."""
 
+        DirectLabel(text=".",
+                    scale=0.1,
+                    pos=(position[0] * 8/6, 0, position[1]),
+                    frameColor=self.getBackgroundColor())
+
+        print(position)
 
     def _add_widgets(self):
         """Adds the widgets to the window."""
-
 
         self.solve_button = DirectButton(text="Solve!",
                                          command=self._solve_setup,
@@ -685,7 +684,7 @@ class MainGUI(ShowBase):
         self.solution_label["text"] = solution
         self._show_labels()
 
-    def mouse_click(self):
+    def _mouse_click(self):
         """The method to perform when the left mouse button is clicked.  Creates a task that runs each tick
         while the mouse is clicked which updates the rotation of the cube by the position of the mouse, and
         also checks to see if a sticker is clicked when in its fixed position, coloring that sticker if it is
@@ -706,7 +705,6 @@ class MainGUI(ShowBase):
             for i in range(len(zones)):
                 zone = zones[i]
                 if Geometry.is_within(mouse_pos, zone):
-                    self.debug_mark(mouse_pos)
                     color = CubeModel.color_title_map[self.color_select.get()]
                     self.cube.paint_sticker(self.sticker_map[i], color)
                     clicked_sticker = True
@@ -714,9 +712,9 @@ class MainGUI(ShowBase):
             if not clicked_sticker:
                 self.previous_click = (position[0], position[1])
                 self.taskMgr.remove("click")
-                self.taskMgr.add(self.mouse_down_loop, "click")
+                self.taskMgr.add(self._mouse_down_loop, "click")
 
-    def mouse_down_loop(self, task):
+    def _mouse_down_loop(self, task):
         """Called every tick while the mouse is down.  Updates the rotation based on how much the mouse has moved
         since the last tick.  This method will remove itself from the task manager's event loop when the mouse
         button is released.
@@ -734,7 +732,7 @@ class MainGUI(ShowBase):
 
         """
         if not self.mouseWatcherNode.hasMouse() or not self.mouseWatcherNode.is_button_down('mouse1'):
-            self.adjust_pivot(self.update_sticker_map)
+            self._adjust_pivot(self.update_sticker_map)
             return task.done
 
         position = self.mouseWatcherNode.getMouse()
@@ -770,7 +768,7 @@ class MainGUI(ShowBase):
         )
         sequence.start()
 
-    def adjust_pivot(self, callback=lambda: None):
+    def _adjust_pivot(self, callback=lambda: None):
         """Moves the cube to the nearest fixed orientation and hides the hideable labels.  Optionally calls
         the specified callback when the movement is finished.
 
@@ -782,7 +780,7 @@ class MainGUI(ShowBase):
         self._hide_labels()
         self.move_to(Geometry.get_snapped_angles(self.pivot.getHpr()), callback)
 
-    def get_nearest_corner(self):
+    def _get_nearest_corner(self):
         """Returns the corner nearest to the camera."
 
         Returns
@@ -801,39 +799,6 @@ class MainGUI(ShowBase):
                 nearest_dist = distance
 
         return nearest
-
-    @staticmethod
-    def build_zones(angle_offset):
-        """Creates a tuple of 'zones', where a zone is just four points on the screen marking where a sticker
-        is currently.  Note, these are 2D screen points, not 3D world vectors.  The order of these zones proceeds
-        as follows:  Starting from the origin (0, 0) with the sticker touching the origin and on the Up face,
-        proceed around the Up face clockwise, then move to the sticker touching the origin on the front face,
-        again move around clockwise to each sticker on that face, then to the origin sticker on the left face,
-        clockwise around, and then that is all of the zones.  The resulting tuple contains zones for all stickers
-        currently visible.
-
-        Parameters
-        ----------
-        angle: float
-               The angle of all of the zones, in degrees.  Use 90 for when the top of the cube is visible, and
-               -90 for when the bottom of the cube is visible.
-
-        Returns
-        -------
-        tuple of tuple
-            The zones of the screen, such that the """
-
-        zones = []
-        origin = (0, 0)
-        for i in range(3):
-            angle = -i * 120 + angle_offset
-            inner_zone = Geometry.get_diamond(origin, angle, MainGUI.screen_sticker_edge)
-            zones.append(inner_zone)
-            for point in inner_zone[1:]:
-                point_zone = Geometry.get_diamond(point, angle, MainGUI.screen_sticker_edge)
-                zones.append(point_zone)
-
-        return zones
 
     def _get_sticker_map(self):
         """Returns a map of each screen position id to the sticker that it maps to on the screen currently,
@@ -870,7 +835,7 @@ class MainGUI(ShowBase):
             right_axis, left_axis = left_axis, right_axis
 
         # Get corner stickers, then for each of those stickers, get the other stickers on the same face
-        corner = self.get_nearest_corner()
+        corner = self._get_nearest_corner()
         corner_stickers = self.cube.get_stickers_with_points(corner)
 
         for sticker in corner_stickers:
@@ -924,6 +889,40 @@ class MainGUI(ShowBase):
 
         return sticker_map
 
+    @staticmethod
+    def _build_zones(angle_offset):
+        """Creates a tuple of 'zones', where a zone is just four 2D points on the screen marking where a sticker
+        is currently.  Note, these are 2D screen points, not 3D world vectors.  The order of these zones proceeds
+        as follows:  Starting from the origin (0, 0) with the sticker touching the origin and on the Up face,
+        proceed around the Up face clockwise, then move to the sticker touching the origin on the front face,
+        again move around clockwise to each sticker on that face, then to the origin sticker on the left face,
+        clockwise around, and then that is all of the zones.  The resulting tuple contains zones for all stickers
+        currently visible.
 
-app = MainGUI()
-app.run()
+        Parameters
+        ----------
+        angle_offset: float
+                      The angle of all of the zones, in degrees.  Use 90 for when the top of the cube is visible, and
+                      -90 for when the bottom of the cube is visible.
+
+        Returns
+        -------
+        tuple of tuple
+            The zones of the screen, where a zone is just four 2D points."""
+
+        zones = []
+        origin = (0, 0)
+        for i in range(3):
+            angle = -i * 120 + angle_offset
+            inner_zone = Geometry.get_diamond(origin, angle, MainGUI.screen_sticker_edge)
+            zones.append(inner_zone)
+            for point in inner_zone[1:]:
+                point_zone = Geometry.get_diamond(point, angle, MainGUI.screen_sticker_edge)
+                zones.append(point_zone)
+
+        return zones
+
+
+if __name__ == "__main__":
+    app = MainGUI()
+    app.run()
