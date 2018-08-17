@@ -5,8 +5,8 @@ This project was intended to practice Python, as well as to try solving an inter
 
 ### Getting Started
 
-Running this program requires the graphics library Panda3D, which can be downloaded at https://www.panda3d.org/download.php?runtime,
-or by using the pip command: *$ pip install panda3d*.  After installing Panda3D, download the two modules in this repository and 
+Running this program requires at least Python 3.3 or higher.  Additionally, it requires the graphics library Panda3D, which can be downloaded at https://www.panda3d.org/download.php?runtime, or by using the pip command: 
+*$ pip install panda3d*.  After installing Panda3D, download the two modules in this repository and 
 run user_interface.py.  
 
 ### Instructions
